@@ -1,1 +1,130 @@
-{"metadata":{"kernelspec":{"language":"python","display_name":"Python 3","name":"python3"},"language_info":{"pygments_lexer":"ipython3","nbconvert_exporter":"python","version":"3.6.4","file_extension":".py","codemirror_mode":{"name":"ipython","version":3},"name":"python","mimetype":"text/x-python"}},"nbformat_minor":4,"nbformat":4,"cells":[{"cell_type":"code","source":"# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:44.156733Z\",\"iopub.execute_input\":\"2023-04-15T07:50:44.157449Z\",\"iopub.status.idle\":\"2023-04-15T07:50:44.166487Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:44.157410Z\",\"shell.execute_reply\":\"2023-04-15T07:50:44.165381Z\"}}\nfor dirname, _, filenames in os.walk('/kaggle/input'):\n    for filename in filenames:\n        print(os.path.join(dirname, filename))\n\n# %% [code]\nimport sys\n!{sys.executable} -m pip install tensorflow-addons\nimport tensorflow_addons as tfa\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:44.430726Z\",\"iopub.execute_input\":\"2023-04-15T07:50:44.431055Z\",\"iopub.status.idle\":\"2023-04-15T07:50:44.444883Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:44.431026Z\",\"shell.execute_reply\":\"2023-04-15T07:50:44.443652Z\"}}\n#general purpose packages\nimport os\nimport numpy as np\nimport pandas as pd\nimport tensorflow as tf\nimport matplotlib.pyplot as plt\nimport seaborn as sns\n\n#data processing\nimport re, string\nimport emoji\nimport nltk\n\nfrom sklearn import preprocessing\nfrom imblearn.over_sampling import RandomOverSampler\nfrom sklearn.model_selection import train_test_split\n\n\n#Naive Bayes\nfrom sklearn.feature_extraction.text import CountVectorizer\nfrom sklearn.feature_extraction.text import TfidfTransformer\nfrom sklearn.naive_bayes import MultinomialNB\n\n#transformers\nfrom transformers import BertTokenizerFast\nfrom transformers import TFBertModel\nfrom transformers import RobertaTokenizerFast\nfrom transformers import TFRobertaModel\n\n#keras\nimport tensorflow as tf\nfrom tensorflow import keras\n\n\n#metrics\nfrom sklearn.metrics import accuracy_score, f1_score\nfrom sklearn.metrics import classification_report, confusion_matrix\n\n#set seed for reproducibility\nseed=42\n\n#set style for plots\nsns.set_style(\"whitegrid\")\nsns.despine()\nplt.style.use(\"seaborn-whitegrid\")\nplt.rc(\"figure\", autolayout=True)\nplt.rc(\"axes\", labelweight=\"bold\", labelsize=\"large\", titleweight=\"bold\", titlepad=10)\n\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:44.747508Z\",\"iopub.execute_input\":\"2023-04-15T07:50:44.747793Z\",\"iopub.status.idle\":\"2023-04-15T07:50:44.770762Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:44.747768Z\",\"shell.execute_reply\":\"2023-04-15T07:50:44.769791Z\"}}\ndf = pd.read_csv('/kaggle/input/prometeo23-kaggle/train_absa.csv')\ndf_test = pd.read_csv('/kaggle/input/prometeo23-kaggle/test_absa.csv')\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:45.020102Z\",\"iopub.execute_input\":\"2023-04-15T07:50:45.020492Z\",\"iopub.status.idle\":\"2023-04-15T07:50:45.028691Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:45.020457Z\",\"shell.execute_reply\":\"2023-04-15T07:50:45.027583Z\"}}\ndef conf_matrix(y, y_pred, title):\n    fig, ax =plt.subplots(figsize=(5,5))\n    labels=['Negative', 'Neutral', 'Positive']\n    ax=sns.heatmap(confusion_matrix(y, y_pred), annot=True, cmap=\"Blues\", fmt='g', cbar=False, annot_kws={\"size\":25})\n    plt.title(title, fontsize=20)\n    ax.xaxis.set_ticklabels(labels, fontsize=17) \n    ax.yaxis.set_ticklabels(labels, fontsize=17)\n    ax.set_ylabel('Test', fontsize=20)\n    ax.set_xlabel('Predicted', fontsize=20)\n    plt.show()\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:45.311072Z\",\"iopub.execute_input\":\"2023-04-15T07:50:45.311991Z\",\"iopub.status.idle\":\"2023-04-15T07:50:47.402228Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:45.311940Z\",\"shell.execute_reply\":\"2023-04-15T07:50:47.401151Z\"}}\ntokenizer_roberta = RobertaTokenizerFast.from_pretrained(\"roberta-base\")\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:47.404548Z\",\"iopub.execute_input\":\"2023-04-15T07:50:47.404965Z\",\"iopub.status.idle\":\"2023-04-15T07:50:47.416393Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:47.404908Z\",\"shell.execute_reply\":\"2023-04-15T07:50:47.415327Z\"}}\nX=df['text'].values\ny=df['label'].values\n\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:47.417944Z\",\"iopub.execute_input\":\"2023-04-15T07:50:47.418352Z\",\"iopub.status.idle\":\"2023-04-15T07:50:47.427315Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:47.418313Z\",\"shell.execute_reply\":\"2023-04-15T07:50:47.426317Z\"}}\nx=df_test['text'].values\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:47.429839Z\",\"iopub.execute_input\":\"2023-04-15T07:50:47.430374Z\",\"iopub.status.idle\":\"2023-04-15T07:50:47.442637Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:47.430338Z\",\"shell.execute_reply\":\"2023-04-15T07:50:47.441694Z\"}}\nX_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.1, stratify=y, random_state=seed)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:49.824664Z\",\"iopub.execute_input\":\"2023-04-15T07:50:49.825749Z\",\"iopub.status.idle\":\"2023-04-15T07:50:49.831239Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:49.825703Z\",\"shell.execute_reply\":\"2023-04-15T07:50:49.830286Z\"}}\ny_train_le = y_train.copy()\ny_valid_le = y_valid.copy()\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:50.583662Z\",\"iopub.execute_input\":\"2023-04-15T07:50:50.584374Z\",\"iopub.status.idle\":\"2023-04-15T07:50:50.592623Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:50.584335Z\",\"shell.execute_reply\":\"2023-04-15T07:50:50.591622Z\"}}\nohe = preprocessing.OneHotEncoder()\ny_train = ohe.fit_transform(np.array(y_train).reshape(-1, 1)).toarray()\ny_valid = ohe.fit_transform(np.array(y_valid).reshape(-1, 1)).toarray()\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:51.523130Z\",\"iopub.execute_input\":\"2023-04-15T07:50:51.524168Z\",\"iopub.status.idle\":\"2023-04-15T07:50:51.866606Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:51.524130Z\",\"shell.execute_reply\":\"2023-04-15T07:50:51.865433Z\"}}\ntoken_lens = []\nfor txt in X_train:\n    tokens = tokenizer_roberta.encode(txt, max_length=512, truncation=True)\n    token_lens.append(len(tokens))\nmax_length=np.max(token_lens)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:52.488891Z\",\"iopub.execute_input\":\"2023-04-15T07:50:52.490070Z\",\"iopub.status.idle\":\"2023-04-15T07:50:52.495780Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:52.490002Z\",\"shell.execute_reply\":\"2023-04-15T07:50:52.494079Z\"}}\nMAX_LEN=333\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:53.453489Z\",\"iopub.execute_input\":\"2023-04-15T07:50:53.454415Z\",\"iopub.status.idle\":\"2023-04-15T07:50:53.462181Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:53.454363Z\",\"shell.execute_reply\":\"2023-04-15T07:50:53.460904Z\"}}\ndef encode_examples(ds, limit=-1):\n    # Prepare Input list\n    input_ids_list = []\n    attention_mask_list = []\n    label_list = []\n\n    if (limit > 0):\n        ds = ds.take(limit)\n\n    for review, label in tfds.as_numpy(ds):\n        bert_input = convert_example_to_feature(review.decode())\n        input_ids_list.append(bert_input['input_ids'])\n        attention_mask_list.append(bert_input['attention_mask'])\n        label_list.append([label])\n\n    return tf.data.Dataset.from_tensor_slices((input_ids_list,\n                                               attention_mask_list,\n                                               label_list)).map(map_example_to_dict)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:54.158855Z\",\"iopub.execute_input\":\"2023-04-15T07:50:54.159554Z\",\"iopub.status.idle\":\"2023-04-15T07:50:54.166087Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:54.159519Z\",\"shell.execute_reply\":\"2023-04-15T07:50:54.164777Z\"}}\ndef tokenize_roberta(data,max_len=MAX_LEN) :\n    input_ids = []\n    attention_masks = []\n    for i in range(len(data)):\n        encoded = tokenizer_roberta.encode_plus(\n            data[i],\n            add_special_tokens=True,\n            max_length=max_len,\n            padding='max_length',\n            return_attention_mask=True\n        )\n        input_ids.append(encoded['input_ids'])\n        attention_masks.append(encoded['attention_mask'])\n    return np.array(input_ids),np.array(attention_masks)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:54.527043Z\",\"iopub.execute_input\":\"2023-04-15T07:50:54.527785Z\",\"iopub.status.idle\":\"2023-04-15T07:50:55.306340Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:54.527744Z\",\"shell.execute_reply\":\"2023-04-15T07:50:55.305252Z\"}}\ntrain_input_ids, train_attention_masks = tokenize_roberta(X_train, MAX_LEN)\nval_input_ids, val_attention_masks = tokenize_roberta(X_valid, MAX_LEN)\ntest_input_ids, test_attention_masks = tokenize_roberta(df_test['text'].values, MAX_LEN)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:50:55.332083Z\",\"iopub.execute_input\":\"2023-04-15T07:50:55.332362Z\",\"iopub.status.idle\":\"2023-04-15T07:50:55.431426Z\",\"shell.execute_reply.started\":\"2023-04-15T07:50:55.332338Z\",\"shell.execute_reply\":\"2023-04-15T07:50:55.430533Z\"}}\ntest_input_ids, test_attention_masks = tokenize_roberta(x, MAX_LEN)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:51:06.540194Z\",\"iopub.execute_input\":\"2023-04-15T07:51:06.540584Z\",\"iopub.status.idle\":\"2023-04-15T07:51:11.608132Z\",\"shell.execute_reply.started\":\"2023-04-15T07:51:06.540543Z\",\"shell.execute_reply\":\"2023-04-15T07:51:11.607087Z\"}}\nmetric1=tfa.metrics.F1Score(num_classes=3,threshold=0.5)\nmetric2=tfa.metrics.FBetaScore(num_classes=3,threshold=0.5,beta=2.0)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:51:11.610106Z\",\"iopub.execute_input\":\"2023-04-15T07:51:11.610563Z\",\"iopub.status.idle\":\"2023-04-15T07:51:11.621505Z\",\"shell.execute_reply.started\":\"2023-04-15T07:51:11.610528Z\",\"shell.execute_reply\":\"2023-04-15T07:51:11.620575Z\"}}\ndef create_model(bert_model, max_len=MAX_LEN):\n    \n    opt = tf.keras.optimizers.legacy.Adam(learning_rate=1e-5, decay=0.05)\n    loss = tf.keras.losses.CategoricalCrossentropy()\n    accuracy = tf.keras.metrics.CategoricalAccuracy()\n\n    input_ids = tf.keras.Input(shape=(max_len,),dtype='int32')\n    attention_masks = tf.keras.Input(shape=(max_len,),dtype='int32')\n    output = bert_model([input_ids,attention_masks])\n    output = output[1]\n    output = tf.keras.layers.Dense(3, activation=tf.nn.softmax)(output)\n    model = tf.keras.models.Model(inputs = [input_ids,attention_masks],outputs = output)\n    model.compile(opt, loss=loss, metrics = [metric1,metric2])\n    return model\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:51:11.622875Z\",\"iopub.execute_input\":\"2023-04-15T07:51:11.623358Z\",\"iopub.status.idle\":\"2023-04-15T07:51:27.012688Z\",\"shell.execute_reply.started\":\"2023-04-15T07:51:11.623323Z\",\"shell.execute_reply\":\"2023-04-15T07:51:27.011589Z\"}}\nroberta_model = TFRobertaModel.from_pretrained('roberta-base')\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T07:51:27.015209Z\",\"iopub.execute_input\":\"2023-04-15T07:51:27.015881Z\",\"iopub.status.idle\":\"2023-04-15T07:51:33.351321Z\",\"shell.execute_reply.started\":\"2023-04-15T07:51:27.015841Z\",\"shell.execute_reply\":\"2023-04-15T07:51:33.350235Z\"}}\nmodel = create_model(roberta_model, MAX_LEN)\nprint(model.summary())\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T08:01:42.743389Z\",\"iopub.execute_input\":\"2023-04-15T08:01:42.744162Z\",\"iopub.status.idle\":\"2023-04-15T08:28:37.321142Z\",\"shell.execute_reply.started\":\"2023-04-15T08:01:42.744121Z\",\"shell.execute_reply\":\"2023-04-15T08:28:37.319834Z\"}}\nhistory_2 = model.fit([train_input_ids,train_attention_masks], y_train, validation_data=([val_input_ids,val_attention_masks], y_valid), epochs=10, batch_size=8)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T08:01:40.495983Z\",\"iopub.status.idle\":\"2023-04-15T08:01:40.498586Z\",\"shell.execute_reply.started\":\"2023-04-15T08:01:40.498296Z\",\"shell.execute_reply\":\"2023-04-15T08:01:40.498327Z\"}}\nmodel.save('roberta.h5')\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T09:03:57.774212Z\",\"iopub.execute_input\":\"2023-04-15T09:03:57.774826Z\",\"iopub.status.idle\":\"2023-04-15T09:04:09.900618Z\",\"shell.execute_reply.started\":\"2023-04-15T09:03:57.774788Z\",\"shell.execute_reply\":\"2023-04-15T09:04:09.899421Z\"}}\nresults=list()\nsentiment = model.predict([test_input_ids,test_attention_masks],batch_size=1,verbose = 1)\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T09:04:29.813041Z\",\"iopub.execute_input\":\"2023-04-15T09:04:29.813728Z\",\"iopub.status.idle\":\"2023-04-15T09:04:29.821524Z\",\"shell.execute_reply.started\":\"2023-04-15T09:04:29.813691Z\",\"shell.execute_reply\":\"2023-04-15T09:04:29.820258Z\"}}\nfor i in range(0,len(sentiment)):\n    a=sentiment[i]\n    results.append(np.argmax(a))\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T09:13:52.420503Z\",\"iopub.execute_input\":\"2023-04-15T09:13:52.420984Z\",\"iopub.status.idle\":\"2023-04-15T09:13:52.433432Z\",\"shell.execute_reply.started\":\"2023-04-15T09:13:52.420940Z\",\"shell.execute_reply\":\"2023-04-15T09:13:52.432178Z\"}}\nsub = pd.read_csv('/kaggle/input/prometeo23-kaggle/sample.csv')\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T09:14:50.429522Z\",\"iopub.execute_input\":\"2023-04-15T09:14:50.430446Z\",\"iopub.status.idle\":\"2023-04-15T09:14:50.436373Z\",\"shell.execute_reply.started\":\"2023-04-15T09:14:50.430394Z\",\"shell.execute_reply\":\"2023-04-15T09:14:50.435054Z\"}}\nsub['Predicted'] = results\n\n# %% [code] {\"execution\":{\"iopub.status.busy\":\"2023-04-15T09:16:02.331097Z\",\"iopub.execute_input\":\"2023-04-15T09:16:02.332022Z\",\"iopub.status.idle\":\"2023-04-15T09:16:02.339296Z\",\"shell.execute_reply.started\":\"2023-04-15T09:16:02.331971Z\",\"shell.execute_reply\":\"2023-04-15T09:16:02.338315Z\"}}\nsub.to_csv('submission.csv',index=False)","metadata":{"_uuid":"c979fdfc-27ab-4454-865c-01be12dd1f12","_cell_guid":"604c3b19-d989-4cb9-8a97-00afd6ec1e5f","collapsed":false,"jupyter":{"outputs_hidden":false},"trusted":true},"execution_count":null,"outputs":[]}]}
+import os 
+for dirname, _, filenames in os.walk('/kaggle/input'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
+
+import sys
+!{sys.executable} -m pip install tensorflow-addons
+import tensorflow_addons as tfa
+
+#general purpose packages
+import os
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+
+from sklearn import preprocessing
+from imblearn.over_sampling import RandomOverSampler
+from sklearn.model_selection import train_test_split
+
+#transformers
+from transformers import BertTokenizerFast
+from transformers import TFBertModel
+from transformers import RobertaTokenizerFast
+from transformers import TFRobertaModel
+
+#keras
+import tensorflow as tf
+from tensorflow import keras
+
+#set seed for reproducibility
+seed=42
+
+df = pd.read_csv('/kaggle/input/prometeo23-kaggle/train_absa.csv')
+df_test = pd.read_csv('/kaggle/input/prometeo23-kaggle/test_absa.csv')
+
+tokenizer_roberta = RobertaTokenizerFast.from_pretrained("roberta-base")
+
+X=df['text'].values
+y=df['label'].values
+
+x=df_test['text'].values
+
+X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, stratify=y, random_state=seed)
+
+y_train_le = y_train.copy()
+y_valid_le = y_valid.copy()
+
+ohe = preprocessing.OneHotEncoder()
+y_train = ohe.fit_transform(np.array(y_train).reshape(-1, 1)).toarray()
+y_valid = ohe.fit_transform(np.array(y_valid).reshape(-1, 1)).toarray()
+
+token_lens = []
+for txt in X_train:
+    tokens = tokenizer_roberta.encode(txt, max_length=333, truncation=True)
+    token_lens.append(len(tokens))
+max_length=np.max(token_lens)
+
+MAX_LEN=333
+
+MAX_LEN
+
+def tokenize_roberta(data,max_len=MAX_LEN) :
+    input_ids = []
+    attention_masks = []
+    for i in range(len(data)):
+        encoded = tokenizer_roberta.encode_plus(
+            data[i],
+            add_special_tokens=True,
+            max_length=max_len,
+            padding='max_length',
+            return_attention_mask=True
+        )
+        input_ids.append(encoded['input_ids'])
+        attention_masks.append(encoded['attention_mask'])
+    return np.array(input_ids),np.array(attention_masks)
+
+train_input_ids, train_attention_masks = tokenize_roberta(X_train, MAX_LEN)
+val_input_ids, val_attention_masks = tokenize_roberta(X_valid, MAX_LEN)
+test_input_ids, test_attention_masks = tokenize_roberta(df_test['text'].values, MAX_LEN)
+
+test_input_ids, test_attention_masks = tokenize_roberta(x, MAX_LEN)
+
+metric1=tfa.metrics.F1Score(num_classes=3,threshold=0.5)
+metric2=tfa.metrics.FBetaScore(num_classes=3,threshold=0.5,beta=2.0)
+
+def create_model(bert_model, max_len=MAX_LEN):
+    
+    opt = tf.keras.optimizers.legacy.Adam(learning_rate=2e-5, decay=0.07)
+    loss = tf.keras.losses.CategoricalCrossentropy()
+    accuracy = tf.keras.metrics.CategoricalAccuracy()
+
+    input_ids = tf.keras.Input(shape=(max_len,),dtype='int32')
+    attention_masks = tf.keras.Input(shape=(max_len,),dtype='int32')
+    output = bert_model([input_ids,attention_masks])
+    output = output[1]
+    output = tf.keras.layers.Dense(3, activation=tf.nn.softmax)(output)
+    model = tf.keras.models.Model(inputs = [input_ids,attention_masks],outputs = output)
+    model.compile(opt, loss=loss, metrics = [metric1,metric2])
+    return model
+
+roberta_model = TFRobertaModel.from_pretrained('roberta-base')
+
+model = create_model(roberta_model, MAX_LEN)
+print(model.summary())
+
+history_2 = model.fit([train_input_ids,train_attention_masks], y_train, validation_data=([val_input_ids,val_attention_masks], y_valid), epochs=3, batch_size=4)
+
+model.save('roberta.h5')
+
+results=list()
+sentiment = model.predict([test_input_ids,test_attention_masks],batch_size=1,verbose = 1)
+
+sentiment[0]
+
+for i in range(0,len(sentiment)):
+    a=sentiment[i]
+    results.append(np.argmax(a))
+
+results[0]
+
+sub = pd.read_csv('/kaggle/input/prometeo23-kaggle/sample.csv')
+
+sub_dict = {0:'Negative' , 1:'Neutral' , 2:'Positive'}
+results = sub['Predicted'].map(sub_dict)
+
+sub['Predicted'] = results
+
+sub
+
+sub.to_csv('submission.csv',index=False)
